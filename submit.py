@@ -66,6 +66,7 @@ class Options(Dict):
 	custom_nuc=False
 	control_run=False
 	CB_gly=False
+	dualsbm=True
 	mass=dict()
 
 class Constants(Dict):
@@ -278,7 +279,7 @@ def main():
 	parser.add_argument("--cg_pdb","-cg_pdb", nargs='+', help='User input coarse grained pdbfile')
 	parser.add_argument("--idp_seq","-idp_seq",help="User input sequence fasta file for building/extracting IDRs/segments etc.")
 	parser.add_argument("--nmol","-nmol", nargs='+', help="Include nmol number of molecules in the topology. List of integers. Defatul1 1 per input pdbfile")
-
+	parser.add_argument("--dualsbm","-dualsbm","--nbasin","-nbasin",action='store_true',help="Generate multi-basin .top/.xml file")
 	#output
 	parser.add_argument("--gen_cg","-gen_cg",action='store_true', help="Only Generate CG structure without generating topology .top/.xml files")
 	parser.add_argument("--outtop","-outtop",help='Gromacs topology file output name (tool adds prefix nucl_  and prot_ for independednt files). Default: gromacs.top')
@@ -568,6 +569,13 @@ def main():
 		ModelDir("dlprakash/inter_nbcb.stackparams.dat").copy2("interactions.interface.dat")
 		ModelDir("dlprakash/codonduplex.bpairparams.dat").copy2("interactions.nonbond.dat")
 		opt.codon_pairs=True
+
+	if args.dualsbm:
+		assert not args.nmol
+		assert len(args.aa_pdb)==2
+		prot_contmap.func=7		# Use G1-G2-12
+		nucl_contmap.func=7		# Use G1-G2-12
+		#opt.dualsbm=True
 
 	if args.azia2009:
 		print (">>> Using Azia & Levy 2009 CA-CB model. 10.1006/jmbi.2000.3693")
@@ -1143,6 +1151,10 @@ def main():
 		elif args.banerjee2023:
 			top=Banerjee2023(allatomdata=pdbdata,fconst=fconst,CGlevel=CGlevel,Nmol=Nmol,cmap=(prot_contmap,nucl_contmap,inter_contmap),opt=opt)
 			topdata=top.write_topfile(outtop=topfile,excl=excl_rule,rad=rad,charge=charge,bond_function=bond_function,CBchiral=CB_chiral)
+		elif args.dualsbm:
+			top=GiriRao_dualSBM(allatomdata=pdbdata,fconst=fconst,CGlevel=CGlevel,Nmol=Nmol,cmap=(prot_contmap,nucl_contmap,inter_contmap),opt=opt)
+			topdata=top.write_topfile(outtop=topfile,excl=excl_rule,rad=rad,charge=charge,bond_function=bond_function,CBchiral=CB_chiral)
+			topdata=top.rewrite_topfile(outtop=topfile,excl=excl_rule,rad=rad,charge=charge,bond_function=bond_function,CBchiral=CB_chiral)
 		else:
 			top=Topology(allatomdata=pdbdata,fconst=fconst,CGlevel=CGlevel,Nmol=Nmol,cmap=(prot_contmap,nucl_contmap,inter_contmap),opt=opt)
 			topdata=top.write_topfile(outtop=topfile,excl=excl_rule,rad=rad,charge=charge,bond_function=bond_function,CBchiral=CB_chiral)

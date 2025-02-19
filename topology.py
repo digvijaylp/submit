@@ -9,16 +9,45 @@ class Tables:
     def __init__(self) -> None:
         pass
 
-    def __prePad(self,X):
-        step = 0.001 #nm
-        return np.int_(range(0,int(X[0]*1000)))*0.001
-
     def write_bond_table(self,index,X,V,V_1):
+        step=X[1]-X[0]
+        rounder=np.round(1/step)
+        _X=np.int_(range(0,int(X[0]*rounder)))*step
         with open("table_b"+str(index)+".xvg","w+") as fout:
-            for x in self.__prePad(X):           
+            for x in _X:
                 fout.write("%e %e %e\n"%(x,V[0],0))
             for i in range(X.shape[0]):
                 fout.write("%e %e %e\n"%(X[i],V[i],-V_1[i]))
+        return
+    
+    def write_angle_table(self,index,X,V,V_1):
+        #assert X[0]==0.00 and X[-1]==180.00
+        step=X[1]-X[0]
+        rounder=np.round(1/step)
+        _X=step*np.int_(range(0,int(X[0]*rounder)))
+        X_=step*np.int_(range(int((X[-1]+step)*rounder),int(rounder*(180+step))))
+        with open("table_a"+str(index)+".xvg","w+") as fout:
+            for x in _X:           
+                fout.write("%e %e %e\n"%(x,V[0],0))
+            for i in range(X.shape[0]):
+                fout.write("%e %e %e\n"%(X[i],V[i],-V_1[i]))
+            for x in X_:           
+                fout.write("%e %e %e\n"%(x,V[0],0))
+        return
+    
+    def write_dihedral_table(self,index,X,V,V_1):
+        #assert X[0]==0.00 and X[-1]==180.00
+        step=X[1]-X[0]
+        rounder=np.round(1/step)
+        _X=step*np.int_(range(int(-180*rounder),int(X[0]*rounder)))
+        X_=step*np.int_(range(int((X[-1]+step)*rounder),int(rounder*(180+step))))
+        with open("table_d"+str(index)+".xvg","w+") as fout:
+            for x in _X:           
+                fout.write("%e %e %e\n"%(x,V[0],0))
+            for i in range(X.shape[0]):
+                fout.write("%e %e %e\n"%(X[i],V[i],-V_1[i]))
+            for x in X_:           
+                fout.write("%e %e %e\n"%(x,V[0],0))
         return
     
     def __electrostatics__(self,coulomb,r):
@@ -1528,7 +1557,7 @@ class OpenSMOGXML:
         self.pairs_count+=1
         return
 
-    def write_manyparticle_entries(self,groups,params,name,expression):
+    def write_manyparticle_xml(self,groups,params,name,expression):
         #writing many particle entries 
         if self.pairs_count>0:
             self.fxml.write(' </contacts>\n')
@@ -1554,7 +1583,14 @@ class OpenSMOGXML:
                             expression="Kd*(1+cos(n*phi-phi0));phi0=phi0_deg*3.141592653589793/180"):
         if len(quads)==0: return
         expression="select(check,V,V_pi);check=floor(1000*sin(angle(p1,p2,p3))*sin(angle(p2,p3,p4)));V_pi=0.0;V="+expression+";phi=dihedral(p1,p2,p3,p4)"
-        self.write_manyparticle_entries(params=params,name=name,expression=expression,groups=quads)        
+        self.write_manyparticle_xml(params=params,name=name,expression=expression,groups=quads)        
+        return
+
+    def write_angles_xml(self,triplets=[],theta0_deg=[],params={},name="CustomAngles",\
+                            expression="0.5*Ka*(theta-theta0)^2;theta0=theta0_deg*3.141592653589793/180"):
+        if len(triplets)==0: return
+        expression=expression+";theta=angle(p1,p2,p3)"
+        self.write_manyparticle_xml(params=params,name=name,expression=expression,groups=triplets)        
         return
 
     def __del__(self):
@@ -1575,6 +1611,8 @@ class Topology:
         self.excl_volume,self.excl_volume_set = dict(),dict()
         self.mass=opt.mass
         self.atomtypes = []
+        self.prot_finaldata=[]
+        self.nucl_finaldata=[]
         self.tableb_ndx = 0
 
     def write_header(self,fout,combrule) -> None:
@@ -1952,7 +1990,7 @@ class Topology:
                     temp_q+=list(quads);temp_d+=list(diheds)
                 quads,diheds=np.int_(temp_q),np.float_(temp_d)
                 self.prot_xmlfile.write_dihedrals_xml(quads=quads,name="sc_dihedrals",\
-                            expression="Kd*(min(v1,v2)^2);v1=abs(phi-phi0);v2=abs(2*pi+phi-phi0);phi0=phi0_deg*pi/180;pi=3.141592653589793",\
+                            expression="0.5*Kd*(min(v1,v2)^2);v1=abs(phi-phi0);v2=abs(2*pi+phi-phi0);phi0=phi0_deg*pi/180;pi=3.141592653589793",\
                             params={"phi0_deg":diheds,"Kd":Kd_sc*np.ones(quads.shape[0])})
             del(temp_q,temp_d)
             return 
@@ -2322,6 +2360,7 @@ class Topology:
                     self.write_footer(fout=ftop)
                     Data[i].CA_atn,Data[i].CB_atn=proc_data_p.CA_atn,proc_data_p.CB_atn
                     Data[i].cgpdb_p=proc_data_p.cgpdb
+                    self.prot_finaldata.append(proc_data_p)
                 if self.opt.opensmog: del self.prot_xmlfile
             if len(self.allatomdata[i].nucl.lines) > 0 and self.CGlevel["nucl"] in (1,3,5):
                 if self.CGlevel["nucl"]==1: cgpdb.loadfile(infile=self.allatomdata[i].nucl.bb_file,renumber=False)
@@ -2345,6 +2384,7 @@ class Topology:
                     self.write_footer(fout=ftop)
                     Data[i].P_atn,Data[i].S_atn,Data[i].B_atn=proc_data_n.P_atn,proc_data_n.S_atn,proc_data_n.B_atn
                     Data[i].cgpdb_n=proc_data_n.cgpdb
+                    self.nucl_finaldata.append(proc_data_n)
                 if self.opt.opensmog: del self.nucl_xmlfile
             self.__next__()
         if sum(Nmol["prot"])==0: self.CGlevel["prot"],self.cmap["prot"].func=0,-1
@@ -2675,7 +2715,7 @@ class Reddy2017(Topology):
                             expression="-(K/2)*(R^2)*log(1-((r-r0)/R)^2); R=%.2f; K=%e"%(R,K))
             for i in range(pairs.shape[0]): 
                 r0 = np.round(dist[i],3)
-                fout.write(" %5d %5d %5d %.3f 0.0; dummy_entry\n"%(I[i],J[i],1,r0))
+                fout.write(" %5d %5d %5d %.3f 0.0; dummy_entry; bond_in_xml\n"%(I[i],J[i],1,r0))
             return
         #else:
         fout.write(";%5s %5s %5s %5s %5s\n"%("ai", "aj", "func", "table_no.", "Kb"))
@@ -3188,7 +3228,7 @@ class SOPSC_IDR(Reddy2017):
                 I,J = 1+np.transpose(pairs) 
                 for i in range(pairs.shape[0]): 
                     r0 = np.round(dist[i],3)
-                    fout.write(" %5d %5d %5d %.3f 0.0; dummy_entry\n"%(I[i],J[i],1,r0))
+                    fout.write(" %5d %5d %5d %.3f 0.0; dummy_entry; bond_in_xml\n"%(I[i],J[i],1,r0))
             return
         #else:
         fout.write(";%5s %5s %5s %5s %5s\n"%("ai", "aj", "func", "table_no.", "Kb"))
@@ -3670,3 +3710,473 @@ class Baratam2024(SOPSC_IDR):
 
         self.write_protein_localangreps(fout=fout,data=data,o2n_atn=old2new_atn)
         return
+
+class GiriRao_dualSBM(Topology):
+
+    def align_atnum(self,data):
+        assert (len(data)==2)
+        self.str2_to_str1_align=dict()
+        if len(data[0].CA_atn)!=0:
+            for c in data[0].CA_atn:
+                self.str2_to_str1_align[c]=dict()
+                for r in data[0].CA_atn[c]:
+                    if r not in data[1].CA_atn[c]: continue
+                    self.str2_to_str1_align[c][data[1].CA_atn[c][r]]=data[0].CA_atn[c][r]
+            if len(data[0].CB_atn)!=0:
+                for c in data[0].CB_atn:
+                    for r in data[0].CB_atn[c]:
+                        if r not in data[1].CB_atn[c]: continue
+                        self.str2_to_str1_align[c][data[1].CB_atn[c][r]]=data[0].CB_atn[c][r]
+            if data[0].bonds:
+                dist_cutoff=  0.075 #0.38/5.0 #nm
+                for c in range(len(data[1].bonds)):
+                    pairs,dist=data[0].bonds[c]
+                    data[0].bonds[c]=dict()
+                    for x in range(len(dist)):
+                        data[0].bonds[c][tuple(pairs[x])]=[dist[x]]
+                    pairs,dist=data[1].bonds[c]
+                    for x in range(len(dist)):
+                        a1,a2=pairs[x]
+                        d=dist[x]
+                        if a1 not in self.str2_to_str1_align[c]: continue
+                        if a2 not in self.str2_to_str1_align[c]: continue
+                        a1=self.str2_to_str1_align[c][a1]
+                        a2=self.str2_to_str1_align[c][a2]
+                        if (a1,a2) not in data[0].bonds[c]: continue
+                        if np.abs(data[0].bonds[c][(a1,a2)][0]-d)>=dist_cutoff:
+                            data[0].bonds[c][(a1,a2)].append(d)
+                del (data[1].bonds)
+            if data[0].angles:
+                ang_cutoff=  18.0 # deg paper uses 18.12
+                for c in range(len(data[1].angles)):
+                    triplets,theta=data[0].angles[c]
+                    data[0].angles[c]=dict()
+                    for x in range(len(theta)):
+                        assert theta[x]>=0.0 and theta[x]<=180.0
+                        data[0].angles[c][tuple(triplets[x])]=[theta[x]]
+                    triplets,theta=data[1].angles[c]
+                    for x in range(len(theta)):
+                        a1,a2,a3=triplets[x]
+                        t=theta[x]; assert t>=0.0 and t<=180.0
+                        if a1 not in self.str2_to_str1_align[c]: continue
+                        if a2 not in self.str2_to_str1_align[c]: continue
+                        if a3 not in self.str2_to_str1_align[c]: continue
+                        a1=self.str2_to_str1_align[c][a1]
+                        a2=self.str2_to_str1_align[c][a2]
+                        a3=self.str2_to_str1_align[c][a3]
+                        if (a1,a2,a3) not in data[0].angles[c]: continue
+                        abs_check=np.abs(data[0].angles[c][(a1,a2,a3)][0]-t)
+                        abs_check=min(abs_check,365-abs_check)
+                        if abs_check>=ang_cutoff:
+                            data[0].angles[c][(a1,a2,a3)].append(t)
+                del (data[1].angles)
+            if data[0].bb_dihedrals:
+                ang_cutoff=  36.0 # deg #paper uses 54.5
+                for c in range(len(data[1].bb_dihedrals)):
+                    quads,phi=data[0].bb_dihedrals[c]
+                    data[0].bb_dihedrals[c]=dict()
+                    for x in range(len(phi)):
+                        phi[x]=phi[x]%360.0
+                        phi[x]-=int(phi[x]>180)*360
+                        data[0].bb_dihedrals[c][tuple(quads[x])]=[phi[x]]
+                    quads,phi=data[1].bb_dihedrals[c]
+                    for x in range(len(phi)):
+                        a1,a2,a3,a4=quads[x]
+                        phi[x]=phi[x]%360.0
+                        phi[x]-=int(phi[x]>180)*360
+                        t=phi[x]
+                        if a1 not in self.str2_to_str1_align[c]: continue
+                        if a2 not in self.str2_to_str1_align[c]: continue
+                        if a3 not in self.str2_to_str1_align[c]: continue
+                        if a4 not in self.str2_to_str1_align[c]: continue
+                        a1=self.str2_to_str1_align[c][a1]
+                        a2=self.str2_to_str1_align[c][a2]
+                        a3=self.str2_to_str1_align[c][a3]
+                        a4=self.str2_to_str1_align[c][a4]
+                        if (a1,a2,a3,a4) not in data[0].bb_dihedrals[c]: continue
+                        abs_check=np.abs(data[0].bb_dihedrals[c][(a1,a2,a3,a4)][0]-t)
+                        abs_check=min(abs_check,365-abs_check)
+                        if abs_check>=ang_cutoff:
+                            data[0].bb_dihedrals[c][(a1,a2,a3,a4)].append(t)
+                del (data[1].bb_dihedrals)
+            if data[0].sc_dihedrals:
+                ang_cutoff=  18.0 # deg #using same as harmonic angle
+                for c in range(len(data[1].sc_dihedrals)):
+                    quads,phi=data[0].sc_dihedrals[c]
+                    data[0].sc_dihedrals[c]=dict()
+                    for x in range(len(phi)):
+                        data[0].sc_dihedrals[c][tuple(quads[x])]=[phi[x]]
+                    quads,phi=data[1].sc_dihedrals[c]
+                    for x in range(len(phi)):
+                        a1,a2,a3,a4=quads[x]
+                        t=phi[x]
+                        if a1 not in self.str2_to_str1_align[c]: continue
+                        if a2 not in self.str2_to_str1_align[c]: continue
+                        if a3 not in self.str2_to_str1_align[c]: continue
+                        if a4 not in self.str2_to_str1_align[c]: continue
+                        a1=self.str2_to_str1_align[c][a1]
+                        a2=self.str2_to_str1_align[c][a2]
+                        a3=self.str2_to_str1_align[c][a3]
+                        a4=self.str2_to_str1_align[c][a4]
+                        if (a1,a2,a3,a4) not in data[0].sc_dihedrals[c]: continue
+                        abs_check=np.abs(data[0].sc_dihedrals[c][(a1,a2,a3,a4)][0]-t)
+                        abs_check=min(abs_check,365-abs_check)
+                        if abs_check>=ang_cutoff:
+                            data[0].sc_dihedrals[c][(a1,a2,a3,a4)].append(t)
+                del (data[1].sc_dihedrals)
+            if data[0].contacts:
+                dist_cutoff=  0.2  # nm
+                assert len(data[1].contacts)==1 and len(data[0].contacts)==1
+                temp_pairs,temp_chains,temp_dist,temp_eps=data[0].contacts[0]
+                temp_pairs=[tuple(p) for p in temp_pairs]
+                temp_dist=[[d] for d in temp_dist]
+                temp_chains=[-1+np.int_((c1.split("_")[1],c2.split("_")[1])) for c1,c2 in temp_chains]
+                temp_eps=list(temp_eps)
+                temp_tags=[str() for x in temp_pairs]
+                pairs,chains,dist,eps=data[1].contacts[0]
+                pairs=[tuple(p) for p in pairs]
+                chains=[-1+np.int_((c1.split("_")[1],c2.split("_")[1])) for c1,c2 in chains]
+                for x in range(len(pairs)):
+                    a1,a2=pairs[x]
+                    c1,c2=chains[x]
+                    if a1 not in self.str2_to_str1_align[c1]: continue
+                    if a2 not in self.str2_to_str1_align[c2]: continue
+                    a1=self.str2_to_str1_align[c1][a1]
+                    a2=self.str2_to_str1_align[c2][a2]
+                    p=(a1,a2)
+                    if p in temp_pairs:
+                        y=temp_pairs.index(p)
+                        temp_c1,temp_c2=temp_chains[y]
+                        assert (temp_c1,temp_c2)==(c1,c2)
+                        temp_dist[y].append(dist[x])
+                        temp_tags[y]="; dual"
+                    else:
+                        temp_pairs.append(p)
+                        temp_chains.append(chains[x])
+                        temp_dist.append([dist[x]])
+                        temp_eps.append(eps[x])
+                        temp_tags.append("; single prot1")
+                data[0].contacts[0]=\
+                    np.int_([temp_pairs[x] for x in range(len(temp_dist)) if temp_tags[x]==str()]),\
+                    [temp_chains[x] for x in range(len(temp_dist)) if temp_tags[x]==str()],\
+                    np.float_([temp_dist[x] for x in range(len(temp_dist)) if temp_tags[x]==str()]),\
+                    [temp_eps[x] for x in range(len(temp_dist)) if temp_tags[x]==str()]
+                if (len([t for t in temp_tags if "dual" in t]))>0:
+                    data[0].contacts.append(list())
+                    data[0].contacts[-1]=\
+                        np.int_([temp_pairs[x] for x in range(len(temp_dist)) if len(temp_dist[x])>1]),\
+                        [temp_chains[x] for x in range(len(temp_dist)) if len(temp_dist[x])>1],\
+                        np.float_([temp_dist[x] for x in range(len(temp_dist)) if len(temp_dist[x])>1]),\
+                        [temp_eps[x] for x in range(len(temp_dist)) if len(temp_dist[x])>1]
+                if (len([t for t in temp_tags if "single" in t]))>0:
+                    data[0].contacts.append(list())
+                    data[0].contacts[-1]=\
+                        np.int_([temp_pairs[x] for x in range(len(temp_dist)) if "single" in temp_tags[x]]),\
+                        [temp_chains[x] for x in range(len(temp_dist)) if "single" in temp_tags[x]],\
+                        np.float_([temp_dist[x] for x in range(len(temp_dist)) if "single" in temp_tags[x]]),\
+                        [temp_eps[x] for x in range(len(temp_dist)) if "single" in temp_tags[x]]
+                del (data[1].contacts)
+        return        
+
+    def rewrite_protein_bonds(self,fout,func):
+        print (">> Writing bonds section")
+        #GROMACS IMPLEMENTS Ebonds = (Kx/2)*(r-r0)^2
+        #Input units KJ mol-1 A-2 GROMACS units KJ mol-1 nm-1 (100 times the input value) 
+        Kb = float(self.fconst.Kb_prot)*100.0
+
+        #GROMACS 4.5.4 : FENE=7 AND HARMONIC=1
+        #if dsb: func = 9
+        fout.write("\n%s\n"%("[ bonds ]"))
+        fout.write(";%5s %5s %5s %5s %5s\n"%("ai", "aj", "func", "r0(nm)", "Kb"))
+
+        if self.opt.opensmog: opnsmog_pairs=[]
+        else:table_idx=dict()
+
+        for pairs in self.prot_finaldata[0].bonds:
+            temp=[(p[0],p[1],pairs[p][0]) for p in pairs if len(pairs[p])==1]
+            if len(temp)!=0:
+                I,J,dist=np.transpose(temp)
+                I,J=I+1,J+1
+                for x in range(dist.shape[0]): 
+                    fout.write(" %5d %5d %5d %e %e\n"%(I[x],J[x],func,dist[x],Kb))
+            temp=[(p[0],p[1],pairs[p][0],pairs[p][1]) for p in pairs if len(pairs[p])==2]
+            if len(temp)!=0:
+                I,J,d1,d2=np.transpose(temp)
+                I,J,d1,d2=I+1,J+1,np.round(d1,3),np.round(d2,3)
+                if self.opt.opensmog: 
+                    opnsmog_pairs+=temp
+                    for i in range(d1.shape[0]):
+                        fout.write(" %5d %5d %5d %.3f 0.0; dummy_entry; bond_in_xml\n"%(I[i],J[i],1,d1))
+                    continue
+                r=0.001*np.int_(range(0,1001))
+                print ("> Writing dual bonds tables.")
+                for x in trange(d1.shape[0]):
+                    r0=[d1[x],d2[x]]; r0.sort();r0=tuple(r0)
+                    if r0 not in table_idx: table_idx[r0]=len(table_idx)+self.tableb_ndx
+                    V = 0.5*((r-r0[0])**2)*((r-r0[1])**2)
+                    #V = 0.5((r-x)(r-y))**2
+                    #  = 0.5((r^2 - rx - ry + xy)**2
+                    #V_1 = 0.5*2*(r^2-rx-ry+xy)(2r-x-y)
+                    #V_1 = (r-x)(r-y)(2r-x-y) = (r-x)(r-y)((r-x)+(r-y))
+                    #V_1 = ((r-x)^2)(r-y)+(r-x)((r-y)^2)
+                    V_1 = ((r-r0[0])**2)*(r-r0[1]) + (r-r0[0])*((r-r0[1])**2)
+                    Tables().write_bond_table(X=r,index=table_idx[r0],V=V,V_1=V_1)
+                    fout.write(" %5d %5d %5d %5d %e; d1=%.3f d2=%.3f\n"%(I[x],J[x],8,table_idx[r0],Kb,r0[0],r0[1]))
+            del(temp)
+        #self.tableb_ndx=max(table_idx.values())
+        if len(opnsmog_pairs)!=0:
+            I,J,d1,d2=np.transpose(temp)
+            pairs=np.int_([I,J]).T
+            self.prot_xmlfile.write_pairs_xml(pairs=pairs,params={"r00":d1,"r01":d2,"Kb":Kb*np.ones(len(pairs))},\
+                                name="dual_bonds",expression="0.5*Kb*((r-r00)^2)*((r-r01)^2)")
+        return 
+
+    def rewrite_protein_angles(self,fout):
+        print (">> Writing angless section")
+        #V_ang = (Ktheta/2)*(r-r0)^2
+        #Input units KJ mol-1 #GROMACS units KJ mol-1 
+        Ka = float(self.fconst.Ka_prot)
+
+        fout.write("\n%s\n"%("[ angles ]"))
+        fout.write("; %5s %5s %5s %5s %5s %5s\n"%("ai", "aj", "ak","func", "th0(deg)", "Ka"))
+
+        func = 1
+
+        if self.opt.opensmog: opnsmg_triplets=[]
+        else:table_idx=dict()
+        for triplets in self.prot_finaldata[0].angles:
+            temp=[(p[0],p[1],p[2],triplets[p][0]) for p in triplets if len(triplets[p])==1]
+            if len(temp)!=0:
+                I,J,K,theta = np.transpose(temp)
+                I,J,K=I+1,J+1,K+1
+                for x in range(I.shape[0]): 
+                    fout.write(" %5d %5d %5d %5d %e %e\n"%(I[x],J[x],K[x],func,theta[x],Ka))
+            temp=[(p[0],p[1],p[2],triplets[p][0],triplets[p][1]) for p in triplets if len(triplets[p])==2]
+            if len(temp)!=0:
+                I,J,K,t1,t2 = np.transpose(temp)
+                I,J,K,t1,t2=I+1,J+1,K+1,np.round(t1,3),np.round(t2,3)
+                if self.opt.opensmog:
+                    opnsmg_triplets+=temp
+                    for x in range(I.shape[0]): 
+                        fout.write(" %5d %5d %5d %5d %e %e; dummy_entry; angle_in_xml\n"%(I[x],J[x],K[x],func,theta[x],0))
+                    continue
+                #for x in range(I.shape[0]): 
+                t_deg=0.002*np.int_(range(0,int(180.002*500)))
+                t=t_deg*np.pi/180
+                print ("> Writing dual angle tables.")
+                for x in trange(t1.shape[0]):
+                    t0_deg=[t1[x],t2[x]];t0_deg.sort();t0_deg=tuple(t0_deg)
+                    t0=np.float_(t0_deg)*np.pi/180; 
+                    if t0_deg not in table_idx: table_idx[t0_deg]=len(table_idx)+self.tableb_ndx
+                    V = 0.5*((t-t0[0])**2)*((t-t0[1])**2)
+                    V_1 = ((t-t0[0])**2)*(t-t0[1]) + (t-t0[0])*((t-t0[1])**2)
+                    Tables().write_angle_table(X=t_deg,index=table_idx[t0_deg],V=V,V_1=V_1)
+                    fout.write(" %5d %5d %5d %5d %5d %e; t1=%.3f t2=%.3f\n"%(I[x],J[x],K[x],8,table_idx[t0_deg],Ka,t1[x],t2[x]))
+        
+        if len(opnsmg_triplets)!=0:
+            I,J,K,t1,t2 = np.transpose(opnsmg_triplets)
+            triplets=np.int_([I,J,K]).T
+            self.prot_xmlfile.write_angles_xml(triplets=triplets,name="dual_angles",\
+                    expression="0.5*Kd*((theta-t00)^2)*((theta-t01)^2);t00=t00_deg*pi/180;t01=t01_deg*pi/180;pi=3.141592653589793",\
+                    params={"t00_deg":t1,"t01_deg":t2,"Ka":Ka*np.ones(len(triplets))})
+        return
+
+    def rewrite_protein_dihedrals(self,fout,chiral):
+        print (">> Writing dihedrals section")
+
+        #GROMACS IMPLEMENTATION: Edihedrals Kphi*(1 + cos(n(phi-phi0)))
+        #Our implementaion: Edihedrals = Kphi*(1 - cos(n(phi-phi0)))
+        #The negative sign is included by adding phase = 180 to the phi0
+        #Kphi*(1 + cos(n(phi-180-phi0))) = Kphi*(1 + cos(n180)*cos(n(phi-phi0)))
+        #if n is odd i.e. n=1,3.... then cos(n180) = -1
+        #hence Edihedrals = Kphi*(1 - cos(n(phi-phi0)))
+
+        Kd_bb = float(self.fconst.Kd_prot["bb"])
+        Kd_sc = float(self.fconst.Kd_prot["sc"])
+        mfac = float(self.fconst.Kd_prot["mf"])
+
+        phase = 180
+
+        fout.write("\n%s\n"%("[ dihedrals ]"))
+        fout.write("; %5s %5s %5s %5s %5s %5s %5s %5s\n" % (";ai","aj","ak","al","func","phi0(deg)","Kd","mult"))
+
+        if self.opt.opensmog:
+            #backbone
+            temp_q,temp_d=[],[]
+            for quads in self.prot_finaldata[0].bb_dihedrals:
+                temp_q+=[p for p in quads if len(quads[p])==1]
+                temp_d+=[quads[p][0] for p in quads if len(quads[p])==1]
+            quads,diheds=np.int_(temp_q),np.float_(temp_d)
+            if len(quads)!=0:
+                self.prot_xmlfile.write_dihedrals_xml(quads=quads,name="bb_dihedrals",\
+                            expression="Kd*(1-cos(phi-phi0)) + (Kd/fn)*(1-cos(3*(phi-phi0)));phi0=phi0_deg*pi/180;pi=3.141592653589793",\
+                            params={"phi0_deg":diheds,"Kd":Kd_bb*np.ones(quads.shape[0]),"fn":mfac*np.ones(quads.shape[0])})
+            del (temp_q,temp_d)
+            temp_q,temp_d1,temp_d2=[],[],[]
+            for quads in self.prot_finaldata[0].bb_dihedrals:
+                temp_q+=[p for p in quads if len(quads[p])==2]
+                temp_d1+=[quads[p][0] for p in quads if len(quads[p])==2]
+                temp_d2+=[quads[p][1] for p in quads if len(quads[p])==2]
+            quads,d1,d2=np.int_(temp_q),np.float_(temp_d1),np.float_(temp_d2)
+            if len(quads)!=0:
+                self.prot_xmlfile.write_dihedrals_xml(quads=quads,name="dual_bb_dihedrals",\
+                        expression="Kd*(cos(phi-u)-cos(v))^2);u=0.5*(p00+p01);v=0.5*(p00-p01);p00=p00_deg*pi/180;p01=p01_deg*pi/180;pi=3.141592653589793",\
+                        params={"p00_deg":d1,"p01_deg":d2,"Kd":Kd_bb*np.ones(quads.shape[0])})
+            #sihedchain
+            if chiral and len(self.prot_finaldata[0].CB_atn) != 0:
+                temp_q,temp_d=[],[]
+                for quads in self.prot_finaldata[0].sc_dihedrals:
+                    temp_q+=[p for p in quads if len(quads[p])==1]
+                    temp_d+=[quads[p][0] for p in quads if len(quads[p])==1]
+                quads,diheds=np.int_(temp_q),np.float_(temp_d)
+                if len(quads)!=0:
+                    self.prot_xmlfile.write_dihedrals_xml(quads=quads,name="sc_dihedrals",\
+                                expression="0.5*Kd*(min(v1,v2)^2);v1=abs(phi-phi0);v2=abs(2*pi+phi-phi0);phi0=phi0_deg*pi/180;pi=3.141592653589793",\
+                                params={"phi0_deg":diheds,"Kd":Kd_sc*np.ones(quads.shape[0])})
+                del(temp_q,temp_d)
+                temp_q,temp_d1,temp_d2=[],[],[]
+                for quads in self.prot_finaldata[0].sc_dihedrals:
+                    temp_q+=[p for p in quads if len(quads[p])==2]
+                    temp_d1+=[quads[p][0] for p in quads if len(quads[p])==2]
+                    temp_d2+=[quads[p][1] for p in quads if len(quads[p])==2]
+                quads,d1,d2=np.int_(temp_q),np.float_(temp_d1),np.float_(temp_d2)
+                if len(quads)!=0:
+                    self.prot_xmlfile.write_dihedrals_xml(quads=quads,name="dual_bb_dihedrals",\
+                            expression="0.5*Kd*(min(v1,v2)^2)*(min(U1,U2)^2);v1=abs(phi-p00);v2=abs(2*pi+phi-p00);U1=abs(phi-p01);U2=abs(2*pi+phi-p01);p00=p00_deg*pi/180;p01=p01_deg*pi/180;pi=3.141592653589793",\
+                            params={"p00_deg":d1,"p01_deg":d2,"Kd":Kd_bb*np.ones(quads.shape[0])})
+                del(temp_q,temp_d1,temp_d2)
+            return 
+
+        func = 1
+        table_idx=dict()
+        for c in  range(len(self.prot_finaldata[0].bb_dihedrals)):
+            quads=self.prot_finaldata[0].bb_dihedrals[c]
+            temp=[(p[0],p[1],p[2],p[3],quads[p][0]) for p in quads if len(quads[p])==1]
+            if len(temp)!=0:
+                I,J,K,L,diheds = np.transpose(temp)
+                I,J,K,L=I+1,J+1,K+1,L+1
+                diheds += phase
+                for x in range(I.shape[0]): 
+                    fout.write(" %5d %5d %5d %5d %5d %e %e %d\n"%(I[x],J[x],K[x],L[x],func,diheds[x],Kd_bb,1))
+                    fout.write(" %5d %5d %5d %5d %5d %e %e %d\n"%(I[x],J[x],K[x],L[x],func,3*diheds[x],Kd_bb/mfac,3))
+            temp=[(p[0],p[1],p[2],p[3],quads[p][0],quads[p][1]) for p in quads if len(quads[p])==2]
+            if len(temp)!=0:
+                I,J,K,L,t1,t2 = np.transpose(temp)
+                I,J,K,L,t1,t2=I+1,J+1,K+1,L+1,np.round(t1,3),np.round(t2,3)
+                #for x in range(I.shape[0]): 
+                t_deg=0.002*np.int_(range(-int(180*500),int(180.002*500)))
+                t=t_deg*np.pi/180
+                print ("> Writing dual backbone dihedral tables.")
+                for x in trange(t1.shape[0]):
+                    t0_deg=[t1[x],t2[x]]; t0_deg.sort();t0_deg=tuple(t0_deg)
+                    u=0.5*(t1[x]+t2[x])*np.pi/180.0
+                    v=0.5*(t1[x]-t2[x])*np.pi/180.0
+                    if t0_deg not in table_idx: table_idx[t0_deg]=len(table_idx)+self.tableb_ndx
+                    V = (np.cos(t-u)-np.cos(v))**2
+                    #V_1=2(cos(t-u)-cos(v))(-sin(t-u))
+                    V_1 = -2*np.sin(t-u)*(np.cos(t-u)-np.cos(v))
+                    Tables().write_dihedral_table(X=t_deg,index=table_idx[t0_deg],V=V,V_1=V_1)
+                    fout.write(" %5d %5d %5d %5d %5d %5d %e; p1=%.3f p2=%.3f\n"%(I[x],J[x],K[x],L[x],8,table_idx[t0_deg],Kd_bb,t1[x],t2[x]))
+
+        if len(self.prot_finaldata[0].CB_atn)==0: return
+        if not chiral: return
+
+        func = 2
+        fout.write("; %5s %5s %5s %5s %5s %5s %5s \n" % (";ai","aj","ak","al","func","phi0(deg)","Kd"))
+        for c in  range(len(self.prot_finaldata[0].sc_dihedrals)):
+            quads=self.prot_finaldata[0].sc_dihedrals[c]
+            temp=[(p[0],p[1],p[2],p[3],quads[p][0]) for p in quads if len(quads[p])==1]
+            if len(temp)!=0:
+                I,J,K,L,diheds = np.transpose(temp)
+                I,J,K,L=I+1,J+1,K+1,L+1
+                for x in range(I.shape[0]):
+                    fout.write(" %5d %5d %5d %5d %5d %e %e\n"%(I[x],J[x],K[x],L[x],func,diheds[x],Kd_sc))
+            temp=[(p[0],p[1],p[2],p[3],quads[p][0],quads[p][1]) for p in quads if len(quads[p])==2]
+            if len(temp)!=0:
+                I,J,K,L,t1,t2 = np.transpose(temp)
+                I,J,K,L,t1,t2=I+1,J+1,K+1,L+1,np.round(t1,3),np.round(t2,3)
+                #for x in range(I.shape[0]): 
+                t_deg=0.002*np.int_(range(-int(180*500),int(180.002*500)))
+                t=t_deg*np.pi/180
+                print ("> Writing dual sidechain dihedral tables.")
+                for x in range(t1.shape[0]):
+                    t0_deg=[t1[x],t2[x]];t0_deg.sort();t0_deg=tuple(t0_deg)
+                    t0=np.float_(t0_deg)*np.pi/180; 
+                    if t0_deg not in table_idx: table_idx[t0_deg]=len(table_idx)+self.tableb_ndx
+                    V = 0.5*((t-t0[0])**2)*((t-t0[1])**2)
+                    V_1 = ((t-t0[0])**2)*(t-t0[1]) + (t-t0[0])*((t-t0[1])**2)
+                    Tables().write_dihedral_table(X=t_deg,index=table_idx[t0_deg],V=V,V_1=V_1)
+                    fout.write(" %5d %5d %5d %5d %5d %5d %e; t1=%.3f t2=%.3f\n"%(I[x],J[x],K[x],L[x],8,table_idx[t0_deg],Kd_sc,t1[x],t2[x]))
+        return
+
+    def rewrite_protein_pairs(self,fout,excl_rule,charge):
+        print (">> Writing pairs section")
+        cmap = self.cmap["prot"]
+
+        fout.write("\n%s\n"%("[ pairs ]"))
+        assert cmap.func in (6,7)
+        cmap.func=7
+        fout.write(";%5s %5s %5s %5s %5s %5s %5s\n"%("i","j","func","eps","r0","sd","C12(Rep)"))
+        func = 7
+        sd = 0.05
+        data=self.prot_finaldata[0]
+        for c in range(len(data.contacts)):
+            pairs,chains,dist,eps=data.contacts[c]
+            I,J = np.transpose(pairs)
+            I = np.float_([self.excl_volume[self.atomtypes[x]] for x in I])
+            J = np.float_([self.excl_volume[self.atomtypes[x]] for x in J])
+            if excl_rule == 1: c12 = ((I**12.0)*(J**12.0))**0.5
+            elif excl_rule == 2: c12 = ((I+J)/2.0)**12.0
+            assert cmap.func==7
+            if self.opt.opensmog:
+                N_dist_values=dist.shape[1]
+                expr="(1+(C12/(r^12)))"
+                for i in range(N_dist_values): expr+="*(1-G%d)"%i
+                expr="eps*(%s - 1)"%expr
+                for i in range(N_dist_values):
+                    expr="%s;G%d=exp(-((r-r0%d)^2)/(2*(sd%d^2)))"%(expr,i,i,i)
+                params={"eps":eps,"C12":c12}
+                dist=np.transpose(dist)
+                for i in range(N_dist_values):
+                    params["r0%d"%i]=dist[i]
+                    params["sd%d"%i]=sd*np.ones(len(dist[i]))
+                self.prot_xmlfile.write_pairs_xml(pairs=pairs,params=params,expression=expr,\
+                                name="contacts%d_%dGaussian-12"%(c,N_dist_values))
+                continue
+            I,J = 1+np.transpose(pairs)
+            for x in range(pairs.shape[0]):
+                assert len(dist[x])<=2, "Error GROMACS 4.5.4 SBM version supports maximim two distances for Gaussians"
+                if len(dist[x])==1:func=6
+                else: func=7
+                fout.write(" %5d %5d %5d %.3f"%(I[x],J[x],func,eps[x]))
+                for r0 in dist[x]: fout.write(" %e %e"%(r0,sd))
+                fout.write(" %e \n"%c12[x])
+        return 
+
+    def rewrite_topfile(self,outtop,excl,charge,bond_function,CBchiral,rad):
+        print (">>> Writing dual-basin topfile.")
+        cgpdb = PDB_IO()
+        i=fileindex=0
+        if len(self.allatomdata[i].prot.lines) > 0 and self.CGlevel["prot"] in (1,2):
+            if self.CGlevel["prot"]==1: cgpdb.loadfile(infile=self.allatomdata[i].prot.bb_file,renumber=False)
+            elif self.CGlevel["prot"]==2: cgpdb.loadfile(infile=self.allatomdata[i].prot.sc_file,renumber=False)
+            prot_topfile = outtop
+            if self.opt.opensmog: self.prot_xmlfile=OpenSMOGXML(xmlfile=self.opt.xmlfile,coulomb=charge,nbshift=self.opt.nbshift)
+            with open(prot_topfile,"w+") as ftop:
+                print (">>> writing Protein GROMACS toptology", prot_topfile)
+                proc_data_p=self.prot_finaldata[i]
+                self.align_atnum(data=self.prot_finaldata.copy())
+                self.write_header(fout=ftop,combrule=excl)
+                self.write_protein_atomtypes(fout=ftop,data=proc_data_p,type=self.CGlevel["prot"],seq=cgpdb.prot.seq,rad=rad)
+                self.write_protein_nonbondparams(fout=ftop,data=proc_data_p,type=self.CGlevel["prot"],excl_rule=excl)
+                self.write_moleculetype(fout=ftop)
+                self.write_protein_atoms(fout=ftop,type=self.CGlevel["prot"],cgfile=cgpdb.pdbfile,seq=cgpdb.prot.seq,inc_charge=(charge.CB or charge.CA)*(not self.opt.opensmog))
+                self.rewrite_protein_pairs(fout=ftop, excl_rule=excl,charge=charge)
+                self.rewrite_protein_bonds(fout=ftop,func=bond_function)
+                self.rewrite_protein_angles(fout=ftop)
+                self.rewrite_protein_dihedrals(fout=ftop,chiral=CBchiral)
+                self.write_exclusions(fout=ftop,data=self.prot_finaldata[0])
+                    #self.write_footer(fout=ftop)
+                #if self.opt.opensmog: del self.prot_xmlfile
+        return 0
+
