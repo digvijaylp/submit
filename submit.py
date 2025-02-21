@@ -270,6 +270,7 @@ def main():
 	parser.add_argument("--baidya2022","-baidya2022","--sop_idp2022","-sop_idp2022",action="store_true",help="Baidya & Reddy 2022 SOP-SC-IDP CA-CB. 10.1021/acs.jpclett.2c01972")
 	parser.add_argument("--baratam2024","-baratam2024","--sop_multi","-sop_multi",action="store_true",help="Baratam & Srivastava 2024 SOP-MULTI CA-CB. 10.1101/2024.04.29.591764")
 	parser.add_argument("--sop_idr","-sop_idr",action="store_true",help="Reddy-Thiruamalai(SOPSC) + Baidya-Reddy(SOPIDP) hybrid CA-CB")
+	parser.add_argument("--dualsbm","-dualsbm","--girirao2016","-girirao2016",action='store_true',help="Generate multi-basin .top/.xml file")
 	parser.add_argument("--banerjee2023","-banerjee2023","--selfpeptide","-selfpeptide",action="store_true",help="Banerjee & Gosavi 2023 Self-Peptide model. 10.1021/acs.jpcb.2c05917")
 	parser.add_argument("--virusassembly","-virusassembly","--capsid","-capsid",action="store_true",help="Preset for structure based virus assembly (inter-Symmetrized)")
 	parser.add_argument("--dlprakash","-dlprakash","--duplexpair","-duplexpair",action="store_true",help="Codon pairs (duplex based weight) for Pal2019")
@@ -279,7 +280,6 @@ def main():
 	parser.add_argument("--cg_pdb","-cg_pdb", nargs='+', help='User input coarse grained pdbfile')
 	parser.add_argument("--idp_seq","-idp_seq",help="User input sequence fasta file for building/extracting IDRs/segments etc.")
 	parser.add_argument("--nmol","-nmol", nargs='+', help="Include nmol number of molecules in the topology. List of integers. Defatul1 1 per input pdbfile")
-	parser.add_argument("--dualsbm","-dualsbm","--nbasin","-nbasin",action='store_true',help="Generate multi-basin .top/.xml file")
 	#output
 	parser.add_argument("--gen_cg","-gen_cg",action='store_true', help="Only Generate CG structure without generating topology .top/.xml files")
 	parser.add_argument("--outtop","-outtop",help='Gromacs topology file output name (tool adds prefix nucl_  and prot_ for independednt files). Default: gromacs.top')
@@ -451,6 +451,19 @@ def main():
 
 	"""" Defining inputs for preset models """
 
+	list_of_protein_presets=[
+		args.clementi2000, args.afsar2008, args.azia2009, args.reddy2017,\
+		args.baul2019, args.baidya2022, args.baratam2024, args.sop_idr]
+	list_of_nucleicacid_presets=[args.denesyuk2013, args.chakraborty2018,args.dlprakash]
+	list_of_hybrid_presets=[args.dualsbm, args.banerjee2023, args.virusassembly,args.pal2019]
+
+	assert (np.sum(np.int_(list_of_nucleicacid_presets+list_of_hybrid_presets))) == 1,\
+		"Error! Two hybrid (protein + nucleic acid) SBMs cannot be implemented togther."
+	assert (np.sum(np.int_(list_of_protein_presets+list_of_hybrid_presets))) == 1,\
+		"Error! Two protein SBMs cannot be implemented togther."
+	assert (np.sum(np.int_(list_of_nucleicacid_presets+list_of_hybrid_presets))) == 1,\
+		"Error! Two nucleic acid SBMs cannot be implemented togther."
+
 	if args.clementi2000:
 		print (">>> Using Clementi et. al. 2000 CA-only model. 10.1006/jmbi.2000.3693")
 		assert args.aa_pdb, "Error no pdb input --aa_pdb"
@@ -573,8 +586,11 @@ def main():
 	if args.dualsbm:
 		assert not args.nmol
 		assert len(args.aa_pdb)==2
+		rad["CA"]=2.0			# 4.0 A excl vol rad
+		CGlevel["prot"]=1
 		prot_contmap.func=7		# Use G1-G2-12
 		nucl_contmap.func=7		# Use G1-G2-12
+		args.box=0
 		#opt.dualsbm=True
 
 	if args.azia2009:
@@ -1155,6 +1171,10 @@ def main():
 			top=GiriRao_dualSBM(allatomdata=pdbdata,fconst=fconst,CGlevel=CGlevel,Nmol=Nmol,cmap=(prot_contmap,nucl_contmap,inter_contmap),opt=opt)
 			topdata=top.write_topfile(outtop=topfile,excl=excl_rule,rad=rad,charge=charge,bond_function=bond_function,CBchiral=CB_chiral)
 			topdata=top.rewrite_topfile(outtop=topfile,excl=excl_rule,rad=rad,charge=charge,bond_function=bond_function,CBchiral=CB_chiral)
+			assert len(pdbdata)==2 ; del(pdbdata[1])
+			for m in Nmol:
+				assert len(Nmol[m])==2
+				Nmol[m]=Nmol[m][:1]
 		else:
 			top=Topology(allatomdata=pdbdata,fconst=fconst,CGlevel=CGlevel,Nmol=Nmol,cmap=(prot_contmap,nucl_contmap,inter_contmap),opt=opt)
 			topdata=top.write_topfile(outtop=topfile,excl=excl_rule,rad=rad,charge=charge,bond_function=bond_function,CBchiral=CB_chiral)

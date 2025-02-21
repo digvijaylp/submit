@@ -3977,7 +3977,7 @@ class GiriRao_dualSBM(Topology):
             I,J,K,t1,t2 = np.transpose(opnsmg_triplets)
             triplets=np.int_([I,J,K]).T
             self.prot_xmlfile.write_angles_xml(triplets=triplets,name="dual_angles",\
-                    expression="0.5*Kd*((theta-t00)^2)*((theta-t01)^2);t00=t00_deg*pi/180;t01=t01_deg*pi/180;pi=3.141592653589793",\
+                    expression="0.5*Ka*((theta-t00)^2)*((theta-t01)^2);t00=t00_deg*pi/180;t01=t01_deg*pi/180;pi=3.141592653589793",\
                     params={"t00_deg":t1,"t01_deg":t2,"Ka":Ka*np.ones(len(triplets))})
         return
 
@@ -4020,7 +4020,7 @@ class GiriRao_dualSBM(Topology):
             quads,d1,d2=np.int_(temp_q),np.float_(temp_d1),np.float_(temp_d2)
             if len(quads)!=0:
                 self.prot_xmlfile.write_dihedrals_xml(quads=quads,name="dual_bb_dihedrals",\
-                        expression="Kd*(cos(phi-u)-cos(v))^2);u=0.5*(p00+p01);v=0.5*(p00-p01);p00=p00_deg*pi/180;p01=p01_deg*pi/180;pi=3.141592653589793",\
+                        expression="Kd*(cos(phi-u)-cos(v))^2;u=0.5*(p00+p01);v=0.5*(p00-p01);p00=p00_deg*pi/180;p01=p01_deg*pi/180;pi=3.141592653589793",\
                         params={"p00_deg":d1,"p01_deg":d2,"Kd":Kd_bb*np.ones(quads.shape[0])})
             #sihedchain
             if chiral and len(self.prot_finaldata[0].CB_atn) != 0:
@@ -4176,7 +4176,7 @@ class GiriRao_dualSBM(Topology):
                 self.rewrite_protein_angles(fout=ftop)
                 self.rewrite_protein_dihedrals(fout=ftop,chiral=CBchiral)
                 self.write_exclusions(fout=ftop,data=self.prot_finaldata[0])
-                    #self.write_footer(fout=ftop)
+                self.write_footer(fout=ftop)
                 #if self.opt.opensmog: del self.prot_xmlfile
         return 0
 
