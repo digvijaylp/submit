@@ -140,6 +140,7 @@ class CleanUP:
 		self.moveFiles(f_prefix="table",f_suffix=".xvg",out_subdir="Tables")
 		self.moveFiles(f_prefix="interactions",f_suffix=".dat",out_subdir="model_params")
 		self.moveFiles(f_prefix="rad",f_suffix=".dat",out_subdir="model_params")
+		self.moveFiles(f_prefix="cgmass",f_suffix=".dat",out_subdir="model_params")
 		self.moveFiles(f_middle="molecule_order.list")
 		self.renameTables()
 		if not fillstatus:
