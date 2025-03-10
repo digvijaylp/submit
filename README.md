@@ -3,6 +3,9 @@
  
  ![alt text](https://github.com/sglabncbs/submit/blob/main/examples/SuBMIT.png)
  
+## *Try on colab notebook*
+https://colab.research.google.com/github/digvijaylp/submit/blob/main/SuBMIT.ipynb
+
 ## *Examples*. 
 ### Model presets allows user to auto-select parameters based on predefined models. </br>
 ### 1. CA-SBM (Clementi et al., 2000. https://doi.org/10.1006/jmbi.2000.3693) 
