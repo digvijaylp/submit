@@ -104,6 +104,7 @@ class Charge(Dict):
 	debye_temp=298  		#K
 	inv_dl=0
 	Kboltz=8.314462618E-3	#KJ mol-1 nm-1
+	kcal=False				# use Kcal/mol value 
 	caltoj=4.184			#kcal mol-1 A-2 to kcal mol-1 A-2
 	inv_4pieps=138.935485	#KJ mol-1 e-2
 	permol=6.022E+23		#n/mol  		#Avogadro's number
@@ -385,7 +386,8 @@ def main():
 	parser.add_argument("--iconc","-iconc", type=float, help="Solvent ion conc.(N) for Debye length calcluation. Default: 0.1 M")  
 	parser.add_argument("--irad","-irad", type=float, help="Solvent ion rad for Debye length calcluation. Default: 1.4 Å")  
 	parser.add_argument("--dielec","-dielec", type=float, help="Dielectric constant of Solvent. Default: 78")
-	
+	parser.add_argument("--elec_kcal","---elec_kcal", action='store_true', help="Use inv_4.pi.eps0 33.206 (Kcal mol-1 e-2) value . Default False (138.935485 KJ mol-1 e-2)")
+
 	#disabled for now
 	parser.add_argument("--dswap","-dswap", action='store_true', default=False, help='For domain swapping runs. Symmetrised SBM is generated.')
 	parser.add_argument("--sym_intra","--sym_intra", action='store_true', default=False, help='Intra-chain Symmetrised SBM is generated.')
@@ -518,6 +520,7 @@ def main():
 		charge.debye=True		# Use DH-electrostatics
 		charge.dielec=70		# dielectric constant
 		charge.iconc=0.01		# concentration
+		charge.kcal=True		# use Kcal mol-1 e-2 value
 		opt.interface=True
 		opt.P_stretch=True	# set P_P_P_P dihed to 180
 		ModelDir("pal2019/adj_nbnb.stackparams.dat").copy2("interactions.pairs.dat")
@@ -549,6 +552,7 @@ def main():
 		charge.debye=True		# Use DH-electrostatics
 		charge.iconc=0.1		# concentration
 		charge.dielec=80		# dielec constant
+		charge.kcal=True		# use Kcal mol-1 e-2 value
 		opt.nbshift=True        # Use potential shift for nonbond interactions
 		opt.P_stretch=False	
 		fconst.Kd_nucl["bb"]=0.9
@@ -576,6 +580,7 @@ def main():
 		charge.debye=True		# Use DH-electrostatics
 		charge.dielec=78		# dielectric constant
 		charge.iconc=0.1		# concentration
+		charge.kcal=True		# use Kcal mol-1 e-2 value
 		opt.nonbond=True	#write custom nonbond from file
 		opt.interface=True
 		opt.P_stretch=False	# set P_P_P_P dihed to 180
@@ -624,6 +629,7 @@ def main():
 		charge.debye=True
 		charge.dielec=10
 		charge.iconc=0.01		# M
+		charge.debye_temp=300	#K
 		CG_mass=True
 		ModelDir("reddy2017/sopsc.cgmass.dat").copy2("cgmass.dat")
 		ModelDir("reddy2017/sopsc.radii.dat").copy2("radii.dat")
@@ -649,6 +655,7 @@ def main():
 		charge.debye=True
 		charge.dielec=78
 		charge.iconc=0.15	#M
+		charge.debye_temp=300	#K
 		opt.nonbond=True
 		CG_mass=True
 		ModelDir("reddy2017/sopsc.cgmass.dat").copy2("cgmass.dat")
@@ -677,6 +684,7 @@ def main():
 		charge.debye=True
 		charge.dielec=78
 		charge.iconc=0.15	#M
+		charge.debye_temp=300	#K
 		CG_mass=True
 		ModelDir("reddy2017/sopsc.cgmass.dat").copy2("cgmass.dat")
 		ModelDir("reddy2017/sopsc.radii.dat").copy2("radii.dat")
@@ -705,6 +713,7 @@ def main():
 		charge.debye=True
 		charge.dielec=78
 		charge.iconc=0.15	#M
+		charge.debye_temp=300	#K
 		ModelDir("reddy2017/sopsc.radii.dat").copy2("radii.dat")
 		ModelDir("reddy2017/sopsc.btparams.dat").copy2("interactions.pairs.dat")
 		ModelDir("reddy2017/sopsc.btparams.dat").copy2("interactions.nonbond.dat")
@@ -1006,7 +1015,8 @@ def main():
 	if args.debye: charge.debye=True
 	if args.debye_temp: charge.debye_temp=float(args.debye_temp)
 	if args.debye_length: charge.inv_dl=1.0/float(args.debye_length)
-
+	if args.elec_kcal: charge.kcal=True
+	
 	#input structure file
 	pdbdata=[]
 	if prot_contmap.type == 1: assert args.aa_pdb, "Error. No all-atom pdb provided. --aa_pdb"
